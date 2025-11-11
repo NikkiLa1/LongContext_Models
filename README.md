@@ -21,7 +21,7 @@ While models like GPT-3.5-Turbo (4K), GPT-4 (8K-32K), and Claude (100K) can acce
 
 **Why This Matters:** Most real-world applications (RAG, document QA, multi-turn conversations) assume models can access information regardless of position in context. This paper shows that assumption is false, with major implications for system design.
 
-# Background
+# Context and Problem
 
 ### The Context Window Arms Race
 
@@ -61,12 +61,14 @@ Models evaluated in this paper:
 
 # Approach
 
-### Experimental Design Overview
+### Overview
 
-The paper uses **controlled experiments** to systematically test position effects:
+This paper does **not** introduce a new model or algorithm. Instead, it provides a systematic **experimental framework** for evaluating position bias in existing language models.
 
-**Key innovation:** 
-Instead of random positioning, test every position (1st, 5th, 10th, 15th, 20th...) to create fine-grained performance curves.
+**Core contribution**: A controlled evaluation methodology that reveals how model performance varies based on information position.
+
+**Key innovation**: Systematic position variation (testing every 5th position) rather than random or coarse-grained testing (just beginning/middle/end).
+
 
 ### Task 1: Multi-Document Question Answering
 
@@ -215,7 +217,224 @@ Standard:                   Query-Aware:
 
 ### Result 5: More Documents Can Hurt
 
+**The experiment:** 
+
+**Results:**
+| **# Documents** | **Retriever Recall** | **GPT-3.5 Accuracy** | **Claude Accuracy** | **Notes** |
+|-----------------|----------------------|----------------------|---------------------|------------|
+| 5  | 67 %  | 50 %  | 49 %  | 🟠 Moderate recall, lower accuracy |
+| 10 | 75 %  | 53 %  | 52 %  | 🟡 Improved performance |
+| 20 | 82 %  | 57 %  | 56 %  | 🟢 Noticeable accuracy gain |
+| 30 | 86 %  | 58 %  | 57 %  | 🟢 Stable improvement |
+| 50 | 90 %  | 58.5 % | 58 % | 🟢 Plateau reached |
+
+**The critical gap:**
+- Adding documents 20→50: Retriever improves +8%, Reader improves only +1.5%
+
+"Using 50 documents instead of 20 retrieved documents only marginally improves performance (∼1.5% for GPT-3.5-Turbo and ∼1% for claude-1.3)."
+
+**Why this matters:** More context can hurt because it creates more "middle" positions where the model struggles.
 
 
 
+### Result 6: Encoder-Decoder Architecture Helps (Within Limits)
+
+<img width="1114" height="336" alt="image" src="https://github.com/user-attachments/assets/52cc60b9-91e4-44e2-9ab3-78cf374fbb60" />
+
+**The experiment:** Test Flan-UL2 (encoder-decoder) vs decoder-only models
+
+
+**Flan-UL2 results:**
+
+**Finding** (page 7):
+
+"When Flan-UL2 is evaluated on sequences within its 2048-token training-time context window, its performance is relatively robust to changes in the position of relevant information within the input context (1.9% absolute difference between best- and worst-case performance)."
+
+**But** (page 7):
+
+"When evaluated on settings with sequences longer than 2048 tokens, Flan-UL2 performance begins to degrade when relevant information is placed in the middle."
+
+## Question 1: Your Own RAG System
+
+**Scenario**: You're building a chatbot that answers questions about your company's internal documentation. You plan to retrieve relevant documents and feed them to GPT-4.
+
+**Question**: Now that you know about the U-shaped performance curve, how would you design your system differently? What's one specific change you'd make?
+
+<details>
+<summary><b>Click to reveal answer</b></summary>
+
+**Answer**: Use chunking - split retrieval into multiple focused API calls with ≤10 documents each, ensuring critical information stays at the edges (beginning or end) of each context window.
+
+**Alternative**: Strategically rerank documents to place the most relevant ones at positions 1-3 (beginning) and the last 3 positions (end), accepting that middle documents will be weakly attended to.
+
+</details>
+
+
+
+## Why Encoder–Decoder Helps
+
+**Bidirectional Encoder**
+- All tokens attend to all other tokens  
+- Can process information in the context of the entire sequence  
+- Position affects *relative weighting*, not absolute visibility  
+
+**Critical Limitation**
+- This advantage only holds **within the training sequence length**
+
+
+### Model Architecture and Pseudocode
+### Conceptual Architecture: How Position Bias Emerges
+
+**Decoder-Only Models (GPT, Claude):**
+
+```
+Architecture:
+  For each token position t:
+    - Can only attend to positions 1 through t (causal masking)
+    - Attention weights learned during training
+    
+  Attention pattern learned from pre-training:
+    - Recent tokens (t-1, t-2, ...): HIGH attention
+      → Strong signal for next-token prediction
+    - Distant tokens (t-100, t-200, ...): LOW attention
+      → Weak signal for next-token prediction
+    
+  Modified by instruction tuning:
+    - First few tokens: MEDIUM-HIGH attention
+      → Contains task instructions
+    - Last few tokens: HIGH attention
+      → Contains user query (recency)
+    - Middle tokens: LOW attention
+      → No special emphasis
+      
+  Result: U-shaped attention distribution
+```
+
+
+**Encoder-Decoder Models (T5, Flan-UL2):**
+
+```
+Architecture:
+  Encoder:
+    - All tokens attend to all tokens (bidirectional)
+    - Position represented via relative position embeddings
+    - Can process token i in context of tokens i-k and i+k
+    
+  Decoder:
+    - Attends to all encoder states
+    - Can access any encoded information uniformly
+    
+  Result: More uniform attention distribution
+  
+  Limitation:
+    - Positional embeddings learned up to training length
+    - Beyond training length: extrapolation fails
+    - U-curve emerges when extrapolating
+```
+
+**Pseudocode: Position-Controlled Evaluation**
+```
+ALGORITHM: EvaluatePositionBias
+INPUT: 
+  - dataset: List of (question, answer_doc, distractor_docs)
+  - model: LanguageModel
+  - num_documents: int (e.g., 20)
+  - positions_to_test: List[int] (e.g., [1, 5, 10, 15, 20])
+
+OUTPUT:
+  - results: Dict[position -> accuracy]
+
+PROCEDURE:
+  results = {}
+  
+  FOR each position p IN positions_to_test:
+    correct_count = 0
+    total_count = 0
+    
+    FOR each (question, answer_doc, distractors) IN dataset:
+      # Step 1: Construct document list with answer at position p
+      documents = []
+      distractor_index = 0
+      
+      FOR i FROM 1 TO num_documents:
+        IF i == position:
+          documents.append(answer_doc)
+        ELSE:
+          documents.append(distractors[distractor_index])
+          distractor_index += 1
+      
+      # Step 2: Format prompt
+      prompt = "Write a high-quality answer using only the provided search results.\n\n"
+      FOR i, doc IN enumerate(documents):
+        prompt += f"Document [{i+1}]: {doc}\n\n"
+      prompt += f"Question: {question}\nAnswer:"
+      
+      # Step 3: Generate response
+      response = model.generate(prompt)
+      
+      # Step 4: Check if correct
+      ground_truth_answers = get_answers(question)
+      is_correct = any(answer.lower() in response.lower() 
+                      for answer in ground_truth_answers)
+      
+      IF is_correct:
+        correct_count += 1
+      total_count += 1
+    
+    # Step 5: Compute accuracy for this position
+    results[position] = correct_count / total_count
+  
+  RETURN results
+```
+
+
+## Key Algorithm: Strategic Document Positioning (Novel Contribution)
+
+**Previous work** (e.g., Ivgi et al., 2023): Only tested beginning vs. random positions
+
+**This paper's innovation:** Fine-grained systematic testing of every position
+
+```
+ALGORITHM: SystematicPositionTest
+INPUT:
+  - num_documents: int (e.g., 20)
+  - granularity: int (e.g., 5 → test positions 1, 5, 10, 15, 20)
+
+OUTPUT:
+  - positions_to_test: List[int]
+
+PROCEDURE:
+  positions = []
+  current_position = 1
+  
+  WHILE current_position <= num_documents:
+    positions.append(current_position)
+    current_position += granularity
+  
+  # Always include last position
+  IF positions[-1] != num_documents:
+    positions.append(num_documents)
+  
+  RETURN positions
+
+EXAMPLE:
+  SystematicPositionTest(20, 5) → [1, 5, 10, 15, 20]
+  
+  Creates 5 test conditions:
+    Condition 1: Answer at position 1  (beginning)
+    Condition 2: Answer at position 5  (early)
+    Condition 3: Answer at position 10 (middle)
+    Condition 4: Answer at position 15 (late)
+    Condition 5: Answer at position 20 (end)
+```
+**Why this matters:** Reveals U-shaped curve instead of just "beginning vs. middle vs. end"
+
+**Comparison to Previous Approach**
+| **Aspect**              | **Previous Work**                          | **This Paper**                                           |
+|--------------------------|--------------------------------------------|----------------------------------------------------------|
+| **Position Granularity** | Coarse (beginning / middle / end)          | Fine-grained (every 5th position)                        |
+| **Control**              | Random positioning                         | Systematic controlled positioning                        |
+| **Task Realism**         | Synthetic or next-word prediction          | Realistic multi-document QA (mimics RAG)                 |
+| **Model Coverage**       | Mostly encoder–decoder                     | Decoder-only **+** encoder–decoder                       |
+| **Extended Context**     | Not tested                                 | Direct comparison (e.g., 4K vs 16K vs 100K)              |
 
