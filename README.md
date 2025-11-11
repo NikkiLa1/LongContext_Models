@@ -1,4 +1,4 @@
-# Lost in the Middle: How Language Models Use Long Contexts
+# Lost in the Middle: How Language Models Use Long Contexts (Experimental Approach)
 
 **Paper:** Lost in the Middle: How Language Models Use Long Contexts (arXiv:2307.03172)
 
@@ -122,6 +122,98 @@ Evaluation:
 
 This allows isolating the effect of position on performance.
 
+# Key Results
+
+### Result 1: The U-Shaped Performance Curve
+
+<img width="454" height="428" alt="image" src="https://github.com/user-attachments/assets/756fa1f7-31fb-4c37-bd6e-5a8e7729dad2" />
+
+This is the paper's core finding. For GPT-3.5-Turbo with 20 documents:
+
+**Quantitative data** (from Table 6, Appendix G.2):
+
+| **Position**     | **Accuracy** | **Change from Position 1** | **vs. No Documents (56.1%)** | **Comparison** |
+|------------------|--------------|-----------------------------|-------------------------------|----------------|
+| 🟢 **1st (beginning)** | **75.8 %** | Baseline | + 19.7 % better | 🟢 Best |
+| 🟡 **5th** | 57.2 % | − 18.6 % | + 1.1 % better | 🟡 Slightly better |
+| 🔴 **10th (middle)** | 53.8 % | − 22.0 % | − 2.3 % worse | 🔴 Worse |
+| 🟠 **15th** | 55.4 % | − 20.4 % | − 0.7 % worse | 🟠 Slightly worse |
+| 🟢 **20th (end)** | 63.2 % | − 12.6 % | + 7.1 % better | 🟢 Better |
+
+**The shocking finding** 
+"When relevant information is placed in the middle of its input context, GPT-3.5-Turbo's performance on the multi-document question task is lower than its performance when predicting without any documents (i.e., the closed-book setting; 56.1%)."
+
+**This means:** Giving the model the answer in the middle makes it perform worse than giving it no documents at all.
+
+### Result 2: All Models Show This Pattern
+
+Every model texted exhibits the U-shaped curve:
+| **Model**              | **Position 1** | **Position 10** | **Position 20** | **Degradation** | **Trend** |
+|-------------------------|----------------|------------------|------------------|------------------|------------|
+|  **GPT-3.5-Turbo**         | 75.8 % | 53.8 % | 63.2 % | −22.0 % | 🔴 High drop |
+|  **GPT-3.5-Turbo-16K**     | 75.7 % | 54.1 % | 63.1 % | −21.6 % | 🔴 High drop |
+|  **Claude-1.3**            | 59.9 % | 56.8 % | 60.1 % | −3.1 %  | 🟡 Stable |
+|  **Claude-1.3-100K**       | 59.8 % | 57.0 % | 60.0 % | −2.8 %  | 🟢 Very stable |
+|  **MPT-30B-Instruct**      | 53.7 % | 52.2 % | 56.3 % | −1.5 %  | 🟠 Minimal drop |
+|  **LongChat-13B-16K**      | 68.6 % | 55.3 % | 55.0 % | −13.3 % | 🔴 Noticeable drop |
+|  **GPT-4**                 | 89 %   | 75 %   | 84 %   | −14.0 % | 🟡 Moderate drop |
+
+**Critical observation** (page 5):
+
+"We find that models often have identical performance to their extended-context counterparts, indicating that extended-context models are not necessarily better at using their input context."
+
+**Extended-context models don't fix the problem:**
+- GPT-3.5 vs. GPT-3.5-16K: Within 0.3% at every position
+- Claude-1.3 vs. Claude-100K: Within 0.2% at every position
+
+**Implication:** Extending context length lets you fit more information, but doesn't help you use it better.
+
+### Result 3: It's Architectural, Not Fixable by Prompting
+
+<img width="444" height="384" alt="image" src="https://github.com/user-attachments/assets/1447f4aa-e847-4194-8834-1ec0d52664a7" />
+
+**The experiment:** Compare MPT-30B (base model, no instruction tuning) vs. MPT-30B-Instruct
+
+"Even base language models (i.e., without instruction fine-tuning) show a U-shaped performance curve as we vary the position of relevant information in the input context."
+
+Both models show nearly identical U-curves.
+
+**What this means:** The position bias emerges during pre-training, not from instruction tuning.
+
+**Why this happens:**
+
+1. Pre-training creates recency bias:
+    - Language models trained to predict next token: P(token_t | previous tokens)
+    - In natural text, recent context is most predictive
+    - Models learn to attend strongly to recent tokens
+
+2. **Instruction tuning adds primacy bias:**
+    - Instructions typically placed at beginning: [System prompt] [Data] [Question]
+    - Models learn to attend to task setup at start
+    - Nothing emphasizes middle content
+
+3. **Result:** Strong beginning + strong end, weak middle (U-curve)
+
+
+### Result 4: Query Duplication Only Helps Simple Retrieval
+
+**The Experiment:** Place query before AND after documents
+```
+Standard:                   Query-Aware:
+[Documents]                 [Query]  ← New: query at start
+[Query]                     [Documents]
+                            [Query]  ← Still at end
+```
+| **Task**              | **Standard** | **Query-Aware** | **Improvement** | **Notes** |
+|------------------------|---------------|------------------|------------------|------------|
+|  **Key-Value Retrieval** | 45 % | 100 % | +55 % | ✅ Major gain |
+|  **Multi-Doc QA**         | 54 % | 56 %  | +2 %  | ⚠️ Minimal improvement |
+
+**Interpretation:** "Query-aware contextualization (placing the query before and after the documents or key-value pairs) enables near-perfect performance on the synthetic key-value task, but minimally changes trends in multi-document QA."
+
+**Why:** Helps locate exact matches (key-value lookup), doesn't help reason about complex information.
+
+### Result 5: More Documents Can Hurt
 
 
 
