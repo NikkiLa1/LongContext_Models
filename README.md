@@ -108,35 +108,6 @@ Evaluation:
 **Why distractors matter:** Using Contriever-retrieved distractors makes the task realistic - these are documents that seem relevant but don't contain the answer, just like real retrieval systems.
 
 
-### Task 2: Key-Value Retrieval (Synthetic)
-
-**Purpose:** Test minimal retrieval capability (no reasoning required)
-
-**Setup:**
-Given:
-- JSON object with k key-value pairs
-- All keys and values are random 128-bit UUIDs
-- A target key to look up
-
-Manipulation:
-- Vary k ∈ {75, 140, 300} pairs
-- Systematically vary position of target pair
-
-Evaluation:
-- Does model return exact matching value?
-
-<img width="739" height="299" alt="image" src="https://github.com/user-attachments/assets/e2030982-3dd5-4f16-b4f1-2bbc25c51aa7" />
-
-
-**Why use UUIDs:** Removes all semantic/linguistic cues - tests pure positional retrieval ability.
-
-**Controlled Variables**
-- Context length: Number of documents/pairs
-- Position: Where the relevant information appears
-- Content: Everything else held constant
-
-This allows isolating the effect of position on performance.
-
 # Key Results
 
 ### Result 1: The U-Shaped Performance Curve
@@ -183,52 +154,7 @@ Every model texted exhibits the U-shaped curve:
 
 **Implication:** Extending context length lets you fit more information, but doesn't help you use it better.
 
-### Result 3: It's Architectural, Not Fixable by Prompting
-
-<img width="444" height="384" alt="image" src="https://github.com/user-attachments/assets/1447f4aa-e847-4194-8834-1ec0d52664a7" />
-
-**The experiment:** Compare MPT-30B (base model, no instruction tuning) vs. MPT-30B-Instruct
-
-"Even base language models (i.e., without instruction fine-tuning) show a U-shaped performance curve as we vary the position of relevant information in the input context."
-
-Both models show nearly identical U-curves.
-
-**What this means:** The position bias emerges during pre-training, not from instruction tuning.
-
-**Why this happens:**
-
-1. Pre-training creates recency bias:
-    - Language models trained to predict next token: P(token_t | previous tokens)
-    - In natural text, recent context is most predictive
-    - Models learn to attend strongly to recent tokens
-
-2. **Instruction tuning adds primacy bias:**
-    - Instructions typically placed at beginning: [System prompt] [Data] [Question]
-    - Models learn to attend to task setup at start
-    - Nothing emphasizes middle content
-
-3. **Result:** Strong beginning + strong end, weak middle (U-curve)
-
-
-### Result 4: Query Duplication Only Helps Simple Retrieval
-
-**The Experiment:** Place query before AND after documents
-```
-Standard:                   Query-Aware:
-[Documents]                 [Query]  ← New: query at start
-[Query]                     [Documents]
-                            [Query]  ← Still at end
-```
-| **Task**              | **Standard** | **Query-Aware** | **Improvement** | **Notes** |
-|------------------------|---------------|------------------|------------------|------------|
-|  **Key-Value Retrieval** | 45 % | 100 % | +55 % | ✅ Major gain |
-|  **Multi-Doc QA**         | 54 % | 56 %  | +2 %  | ⚠️ Minimal improvement |
-
-**Interpretation:** "Query-aware contextualization (placing the query before and after the documents or key-value pairs) enables near-perfect performance on the synthetic key-value task, but minimally changes trends in multi-document QA."
-
-**Why:** Helps locate exact matches (key-value lookup), doesn't help reason about complex information.
-
-### Result 5: More Documents Can Hurt
+### Result 3: More Documents Can Hurt
 
 **The experiment:** 
 
@@ -249,23 +175,6 @@ Standard:                   Query-Aware:
 **Why this matters:** More context can hurt because it creates more "middle" positions where the model struggles.
 
 
-
-### Result 6: Encoder-Decoder Architecture Helps (Within Limits)
-
-<img width="1114" height="336" alt="image" src="https://github.com/user-attachments/assets/52cc60b9-91e4-44e2-9ab3-78cf374fbb60" />
-
-**The experiment:** Test Flan-UL2 (encoder-decoder) vs decoder-only models
-
-
-**Flan-UL2 results:**
-
-**Finding** (page 7):
-
-"When Flan-UL2 is evaluated on sequences within its 2048-token training-time context window, its performance is relatively robust to changes in the position of relevant information within the input context (1.9% absolute difference between best- and worst-case performance)."
-
-**But** (page 7):
-
-"When evaluated on settings with sequences longer than 2048 tokens, Flan-UL2 performance begins to degrade when relevant information is placed in the middle."
 
 ## Question 1: Your Own RAG System
 
