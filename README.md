@@ -191,28 +191,6 @@ Every model texted exhibits the U-shaped curve:
 
 </details>
 
-## Question 2: The Extended Context Paradox
-
-**Scenario**: Claude just announced a 1 million token context window. Your teammate is excited: "Now we can feed it entire codebases without chunking!"
-
-### Question 2: Based on this paper's findings about extended context models (GPT-3.5 vs 16K, Claude vs 100K), what would you say to your teammate? Is their excitement justified?
-
-<details>
-<summary><b>Click to reveal answer</b></summary>
-
-**Answer**: Extended context lets you *fit* more information, but doesn't help the model *use* it better - the position bias remains.
-
-**Evidence from paper**: 
-- GPT-3.5 vs GPT-3.5-16K: Identical performance curves (within 0.3%)
-- Claude-1.3 vs Claude-100K: Identical performance curves (within 0.2%)
-
-**Response to teammate**: "That's great for fitting large documents, but the model will still struggle with information in the middle. With 1M tokens, positions 100K-900K will likely have severe degradation (20%+ drop). We should still chunk strategically rather than dumping entire codebases in one context."
-
-**The paradox**: More context capacity ≠ better context usage.
-
-</details>
-
-
 ## Why Encoder–Decoder Helps
 
 **Bidirectional Encoder**
@@ -380,6 +358,27 @@ EXAMPLE:
 | **Model Coverage**       | Mostly encoder–decoder                     | Decoder-only **+** encoder–decoder                       |
 | **Extended Context**     | Not tested                                 | Direct comparison (e.g., 4K vs 16K vs 100K)              |
 
+## Question 2: The Extended Context Paradox
+
+**Scenario**: Claude just announced a 1 million token context window. Your teammate is excited: "Now we can feed it entire codebases without chunking!"
+
+### Question 2: Based on this paper's findings about extended context models (GPT-3.5 vs 16K, Claude vs 100K), what would you say to your teammate? Is their excitement justified?
+
+<details>
+<summary><b>Click to reveal answer</b></summary>
+
+**Answer**: Extended context lets you *fit* more information, but doesn't help the model *use* it better - the position bias remains.
+
+**Evidence from paper**: 
+- GPT-3.5 vs GPT-3.5-16K: Identical performance curves (within 0.3%)
+- Claude-1.3 vs Claude-100K: Identical performance curves (within 0.2%)
+
+**Response to teammate**: "That's great for fitting large documents, but the model will still struggle with information in the middle. With 1M tokens, positions 100K-900K will likely have severe degradation (20%+ drop). We should still chunk strategically rather than dumping entire codebases in one context."
+
+**The paradox**: More context capacity ≠ better context usage.
+
+</details>
+
 ## Critical Analysis
 
 ### What Was Overlooked
@@ -405,30 +404,6 @@ EXAMPLE:
 - Does the difficulty of distinguishing answer from distractors amplify position effects?
 
 **The paper mentions** (Appendix B) they tried random distractors but doesn't report detailed results or analysis.
-
-**3. No Training Interventions**
-
-**Issue**: The paper identifies the problem but doesn't test whether models could be *trained* to overcome position bias.
-
-**Unexplored approaches**:
-- Position-aware training: Explicitly vary answer position during training
-- Adversarial training: Train on examples where answers are in middle positions
-- Attention regularization: Penalize over-attending to edges during training
-- Curriculum learning: Gradually increase context length with position variation
-
-**Why it matters**: Without testing interventions, we don't know if position bias is fundamental or correctable.
-
-**4. Limited Instruction Format Testing**
-
-**Issue**: Only tested one prompt format ("Write a high-quality answer using only the provided search results").
-
-**Unexplored variations**:
-- Explicit position instructions: "Pay special attention to document 10"
-- Numbered references with importance scores
-- Hierarchical formatting with visual salience cues
-- Different task framings
-
-**Why it matters**: Different prompt engineering might mitigate (though probably not eliminate) position bias.
 
 
 ## Impact
